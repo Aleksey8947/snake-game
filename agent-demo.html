@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Демо: как работает агент (n8n-style)</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background:#0f1220; color:#e8eaf6; min-height:100vh;
+    display:flex; flex-direction:column; align-items:center; padding:24px;
+  }
+  h1 { font-size:22px; margin-bottom:4px; }
+  .sub { color:#8a90b8; font-size:13px; margin-bottom:20px; }
+  .canvas-wrap { position:relative; width:100%; max-width:960px; }
+  svg { width:100%; height:auto; background:#161a2e; border-radius:16px; border:1px solid #262c4a; }
+  .node rect { fill:#1e2440; stroke:#3a4370; stroke-width:1.5; rx:12; }
+  .node.active rect { fill:#2b1d4d; stroke:#a06bff; stroke-width:2.5; filter:drop-shadow(0 0 10px rgba(160,107,255,.7)); }
+  .node.done rect { stroke:#3ddc84; }
+  .node text.title { fill:#cdd3ff; font-size:14px; font-weight:600; }
+  .node text.desc { fill:#7f87b5; font-size:10.5px; }
+  .edge { stroke:#3a4370; stroke-width:2; fill:none; marker-end:url(#arrow); }
+  .edge.lit { stroke:#a06bff; stroke-width:3; }
+  .packet { fill:#ffd166; opacity:0; }
+  .controls { display:flex; gap:12px; margin-top:18px; flex-wrap:wrap; justify-content:center; align-items:center;}
+  input[type=text] {
+    background:#1e2440; border:1px solid #3a4370; color:#fff; padding:10px 14px;
+    border-radius:10px; font-size:15px; width:220px; outline:none;
+  }
+  input[type=text]:focus { border-color:#a06bff; }
+  button {
+    background:linear-gradient(135deg,#7b4dff,#a06bff); color:#fff; border:none;
+    padding:10px 22px; border-radius:10px; font-size:15px; font-weight:600; cursor:pointer;
+  }
+  button:hover { transform:translateY(-1px); }
+  button:disabled { opacity:.45; cursor:wait; transform:none; }
+  .log {
+    width:100%; max-width:960px; margin-top:18px; background:#161a2e; border:1px solid #262c4a;
+    border-radius:14px; padding:16px; min-height:150px; font-size:13.5px; line-height:1.7;
+    font-family:'Consolas',monospace; color:#9aa3d0; overflow-y:auto; max-height:260px;
+  }
+  .log .ok { color:#3ddc84; }
+  .log .info { color:#6bb6ff; }
+  .log .warn { color:#ffd166; }
+  .hint { margin-top:10px; color:#5f6690; font-size:12px; }
+</style>
+</head>
+<body>
+  <h1>🤖 Как работает агент автоматизации</h1>
+  <div class="sub">Тот же принцип, что в n8n: запрос → обработка кодом → вызов внешнего сервиса → форматирование → ответ</div>
+
+  <div class="canvas-wrap">
+    <svg viewBox="0 0 960 300" id="flow">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#3a4370"/>
+        </marker>
+      </defs>
+      <!-- рёбра -->
+      <line class="edge" id="e0" x1="160" y1="150" x2="212" y2="150"/>
+      <line class="edge" id="e1" x1="372" y1="150" x2="424" y2="150"/>
+      <line class="edge" id="e2" x1="584" y1="150" x2="636" y2="150"/>
+      <line class="edge" id="e3" x1="796" y1="150" x2="820" y2="150"/>
+      <!-- узлы -->
+      <g class="node" id="n0"><rect x="10" y="100" width="150" height="100" rx="12"/>
+        <text class="title" x="85" y="135" text-anchor="middle">📥 Webhook</text>
+        <text class="desc" x="85" y="158" text-anchor="middle">входной запрос</text>
+        <text class="desc" x="85" y="174" text-anchor="middle">?city=Москва</text></g>
+      <g class="node" id="n1"><rect x="212" y="100" width="160" height="100" rx="12"/>
+        <text class="title" x="292" y="135" text-anchor="middle">💻 Код</text>
+        <text class="desc" x="292" y="158" text-anchor="middle">разбираем город</text>
+        <text class="desc" x="292" y="174" text-anchor="middle">из URL-параметров</text></g>
+      <g class="node" id="n2"><rect x="424" y="100" width="160" height="100" rx="12"/>
+        <text class="title" x="504" y="135" text-anchor="middle">🌐 HTTP Request</text>
+        <text class="desc" x="504" y="158" text-anchor="middle">запрос к API</text>
+        <text class="desc" x="504" y="174" text-anchor="middle">погоды wttr.in</text></g>
+      <g class="node" id="n3"><rect x="636" y="100" width="160" height="100" rx="12"/>
+        <text class="title" x="716" y="135" text-anchor="middle">✨ Код</text>
+        <text class="desc" x="716" y="158" text-anchor="middle">форматируем</text>
+        <text class="desc" x="716" y="174" text-anchor="middle">красивый ответ</text></g>
+      <g class="node" id="n4"><rect x="820" y="115" width="130" height="70" rx="12"/>
+        <text class="title" x="885" y="145" text-anchor="middle">📤 Ответ</text>
+        <text class="desc" x="885" y="165" text-anchor="middle">клиенту</text></g>
+      <!-- пакет данных -->
+      <circle class="packet" id="pkt" r="8"/>
+    </svg>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="city" value="Moscow" placeholder="Введите город (латиницей)">
+    <button id="run">▶ Запустить агента</button>
+  </div>
+
+  <div class="log" id="log">// Нажмите «Запустить агента» — данные «пакетиком» пройдут по всем узлам, как в реальном workflow n8n.<br>// В последнем узле будет сделан НАСТОЯЩИЙ запрос к открытому API wttr.in (без ключей).</div>
+  <div class="hint">В интерфейсе n8n вы бы увидели то же самое: подсветку выполняемых узлов и JSON-данные на выходе каждого шага.</div>
+
+<script>
+const nodes = [0,1,2,3,4].map(i => document.getElementById('n'+i));
+const edges = [0,1,2,3].map(i => document.getElementById('e'+i));
+const pkt = document.getElementById('pkt');
+const log = document.getElementById('log');
+const btn = document.getElementById('run');
+const nodeY = 150, nodeXs = [85, 292, 504, 716, 885];
+
+function addLog(text, cls='') {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = '> ' + text;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+function clearState() {
+  nodes.forEach(n => n.classList.remove('active','done'));
+  edges.forEach(e => e.classList.remove('lit'));
+  pkt.style.opacity = 0;
+}
+async function animatePacket(fromIdx, toIdx, dur) {
+  return new Promise(res => {
+    const x0 = nodeXs[fromIdx], x1 = nodeXs[toIdx];
+    const t0 = performance.now();
+    pkt.style.opacity = 1;
+    function step(t) {
+      const p = Math.min((t - t0) / dur, 1);
+      const eased = p < .5 ? 2*p*p : 1 - Math.pow(-2*p+2, 2)/2;
+      pkt.setAttribute('cx', x0 + (x1-x0)*eased);
+      pkt.setAttribute('cy', nodeY);
+      if (p < 1) requestAnimationFrame(step); else res();
+    }
+    requestAnimationFrame(step);
+  });
+}
+async function activate(i, ms) {
+  nodes[i].classList.add('active');
+  await new Promise(r => setTimeout(r, ms));
+  nodes[i].classList.remove('active');
+  nodes[i].classList.add('done');
+}
+
+btn.addEventListener('click', async () => {
+  const city = document.getElementById('city').value.trim() || 'Moscow';
+  btn.disabled = true;
+  clearState();
+  log.innerHTML = '';
+  addLog(`Пользователь отправил запрос: GET /webhook/weather?city=${city}`, 'info');
+
+  await activate(0, 700);                       // webhook
+  edges[0].classList.add('lit'); await animatePacket(0,1,600);
+  addLog('Узел «Webhook» передал данные дальше ✔', 'ok');
+
+  await activate(1, 800);                       // разбор города
+  addLog(`Код извлёк город из параметров: "${city}"`);
+  edges[1].classList.add('lit'); await animatePacket(1,2,600);
+  addLog('Узел «Код» завершил работу ✔', 'ok');
+
+  await activate(2, 300);                       // HTTP — реальный запрос
+  addLog(`HTTP Request → https://wttr.in/${city}?format=j1 ...`, 'info');
+  let weather = null;
+  try {
+    const resp = await fetch(`https://wttr.in/${encodeURIComponent(city)}?format=j1`);
+    weather = await resp.json();
+  } catch(e) { addLog('Ошибка сети при запросе к wttr.in: ' + e.message, 'warn'); }
+
+  edges[2].classList.add('lit'); await animatePacket(2,3,600);
+  if (weather) addLog('API вернул JSON с погодой ✔', 'ok');
+
+  await activate(3, 800);                       // форматирование
+  let answer = 'нет данных';
+  if (weather) {
+    const cur = weather.current_condition?.[0] || {};
+    const area = weather.nearest_area?.[0] || {};
+    answer = `🌍 ${area.areaName?.[0]?.value || city}, ${area.country?.[0]?.value || ''}: ` +
+      `${cur.weatherDesc?.[0]?.value || '?'}, ${cur.temp_C}°C (ощущается как ${cur.FeelsLikeC}°C), ` +
+      `влажность ${cur.humidity}%, ветер ${cur.windspeedKmph} км/ч`;
+  }
+  addLog('Ответ отформатирован для пользователя');
+  edges[3].classList.add('lit'); await animatePacket(3,4,500);
+
+  await activate(4, 400);
+  addLog('ФИНАЛЬНЫЙ ОТВЕТ КЛИЕНТУ:', 'ok');
+  addLog(answer, 'ok');
+  btn.disabled = false;
+});
+</script>
+</body>
+</html>
